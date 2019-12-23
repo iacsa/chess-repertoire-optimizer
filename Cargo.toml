@@ -1,0 +1,22 @@
+[package]
+name = "chess-repertoire-optimizer"
+version = "0.1.0"
+authors = ["Matthias Iacsa <mail@matthias.iacsa.de>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Move generation and board management
+pleco = "0.5.0"             # https://crates.io/crates/pleco
+
+chess_pgn_parser = "0.1.2"  # https://crates.io/crates/chess_pgn_parser
+
+# Chess UI
+# chessground = "0.8.0"     # https://crates.io/crates/chessground
+
+# Utilities
+serde = { version = "1.0", features = ["derive"] }
+reqwest = "0.9.22"
+structopt = "0.3"
+bincode = "1.2"

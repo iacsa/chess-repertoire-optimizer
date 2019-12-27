@@ -9,8 +9,7 @@ use crate::opening_book::cache::Cache;
 use crate::opening_book::lichess::Lichess;
 use crate::repertoire_optimizer::RepertoireOptimizer;
 
-use log::{error, info, warn};
-use log::{Metadata, Record};
+use log::{error, info, warn, LevelFilter, Metadata, Record};
 use pleco::Player;
 use std::fs::File;
 use std::path::PathBuf;
@@ -44,6 +43,10 @@ struct Opt {
     /// How many positions with many candidates to show
     #[structopt(long, default_value = "0")]
     most: usize,
+
+    /// Print more additional information
+    #[structopt(name="verbose", long, parse(from_occurrences = log_level))]
+    log_level: LevelFilter,
 }
 
 struct Logger;
@@ -63,6 +66,14 @@ impl log::Log for Logger {
 }
 
 static LOGGER: Logger = Logger;
+
+fn log_level(verbosity: u64) -> LevelFilter {
+    match verbosity {
+        0 => LevelFilter::Warn,
+        1 => LevelFilter::Info,
+        _ => LevelFilter::Debug,
+    }
+}
 
 fn resolve_to_files(paths: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut files = Vec::new();
@@ -91,7 +102,7 @@ pub fn main() -> Result<(), Error> {
     let opt = Opt::from_args();
     let mut positions = Vec::new();
 
-    log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Debug))?;
+    log::set_logger(&LOGGER).map(|()| log::set_max_level(opt.log_level))?;
 
     let mut white_repertoire_optimizer = RepertoireOptimizer::new(Player::White);
     let mut black_repertoire_optimizer = RepertoireOptimizer::new(Player::Black);

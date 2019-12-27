@@ -8,6 +8,7 @@ pub enum Error {
     AmbiguousMove { fen_str: String, mv: String },
     Http,
     Reqwest(reqwest::Error),
+    Log(log::SetLoggerError),
 }
 
 impl std::fmt::Display for Error {
@@ -46,6 +47,9 @@ impl std::fmt::Display for Error {
             Error::Http => {
                 fmt.write_str("Received an unexpected HTTP return code")?;
             }
+            Error::Log(e) => {
+                fmt.write_str(&format!("Error initializing logger: {}", e))?;
+            }
         }
         Ok(())
     }
@@ -66,6 +70,12 @@ impl From<bincode::Error> for Error {
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
         Error::Reqwest(error)
+    }
+}
+
+impl From<log::SetLoggerError> for Error {
+    fn from(error: log::SetLoggerError) -> Self {
+        Error::Log(error)
     }
 }
 

@@ -9,6 +9,8 @@ use crate::opening_book::cache::Cache;
 use crate::opening_book::lichess::Lichess;
 use crate::repertoire_optimizer::RepertoireOptimizer;
 
+use log::{error, info, warn};
+use log::{Metadata, Record};
 use pleco::Player;
 use std::fs::File;
 use std::path::PathBuf;
@@ -44,11 +46,29 @@ struct Opt {
     most: usize,
 }
 
+struct Logger;
+
+impl log::Log for Logger {
+    fn enabled(&self, _: &Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            println!("{} - {}", record.level(), record.args());
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LOGGER: Logger = Logger;
+
 fn resolve_to_files(paths: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for path in paths {
         if path.is_dir() {
-            println!(
+            info!(
                 "'{}' is a directory; Importing all files from within...",
                 path.display()
             );
@@ -71,6 +91,8 @@ pub fn main() -> Result<(), Error> {
     let opt = Opt::from_args();
     let mut positions = Vec::new();
 
+    log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Debug))?;
+
     let mut white_repertoire_optimizer = RepertoireOptimizer::new(Player::White);
     let mut black_repertoire_optimizer = RepertoireOptimizer::new(Player::Black);
     let mut opening_book = Cache::new(Lichess::new());
@@ -79,66 +101,66 @@ pub fn main() -> Result<(), Error> {
         if path.exists() {
             match opening_book.load(File::open(path)?) {
                 Err(e) => {
-                    println!("Failed to read cache file '{}': {:?}", path.display(), e);
+                    error!("Failed to read cache file '{}': {:?}", path.display(), e);
                     return Err(e);
                 }
-                Ok(_) => println!("Cache file '{}' loaded successfully...", path.display()),
+                Ok(_) => info!("Cache file '{}' loaded successfully...", path.display()),
             }
         } else {
-            println!(
+            info!(
                 "Cache file '{}' not found; Will be created...",
                 path.display()
             );
         }
     }
 
-    println!("Importing lines...");
+    info!("Importing lines...");
     for path in resolve_to_files(opt.white_repertoire) {
         match RepertoireOptimizer::read_games(&path) {
             Ok(games) => {
-                println!(
+                info!(
                     "Import of '{}': Found {} games",
                     path.display(),
                     games.len()
                 );
                 for game in games {
                     if let Err(e) = white_repertoire_optimizer.add_game_to_repertoire(game) {
-                        println!("WARNING: '{}' contains bad move: {}", path.display(), e);
+                        warn!("'{}' contains bad move: {}", path.display(), e);
                     }
                 }
             }
             Err(_) => {
-                println!("WARNING: Import of '{}' failed", path.display());
+                warn!("Import of '{}' failed", path.display());
             }
         }
     }
     for path in resolve_to_files(opt.black_repertoire) {
         match RepertoireOptimizer::read_games(&path) {
             Ok(games) => {
-                println!(
+                info!(
                     "Import of '{}': Found {} games",
                     path.display(),
                     games.len()
                 );
                 for game in games {
                     if let Err(e) = black_repertoire_optimizer.add_game_to_repertoire(game) {
-                        println!("WARNING: '{}' contains bad move: {}", path.display(), e);
+                        warn!("'{}' contains bad move: {}", path.display(), e);
                     }
                 }
             }
             Err(_) => {
-                println!("WARNING: Import of '{}' failed", path.display());
+                warn!("Import of '{}' failed", path.display());
             }
         }
     }
 
-    println!("checking book moves...");
+    info!("checking book moves...");
     white_repertoire_optimizer.add_opponents_moves_from_book(&mut opening_book)?;
     black_repertoire_optimizer.add_opponents_moves_from_book(&mut opening_book)?;
-    println!("setting own move frequencies...");
+    info!("setting own move frequencies...");
     white_repertoire_optimizer.set_own_move_frequencies();
     black_repertoire_optimizer.set_own_move_frequencies();
-    println!("updating position frequencies...");
+    info!("updating position frequencies...");
     white_repertoire_optimizer.update_position_frequencies();
     black_repertoire_optimizer.update_position_frequencies();
 
@@ -201,7 +223,7 @@ pub fn main() -> Result<(), Error> {
         }
     }
 
-    println!(
+    info!(
         "Total runtime: {:.2} s",
         now.elapsed().as_millis() as f64 / 1000.0
     );

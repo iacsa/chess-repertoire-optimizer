@@ -7,6 +7,12 @@ use std::rc::Rc;
 use crate::conversion::move_matches_bitmove;
 use crate::error::Error;
 
+#[derive(Default, Clone, Debug)]
+pub struct MoveSequence {
+    pub moves: Vec<AnyMove>,
+    pub frequency: f64,
+}
+
 #[derive(Debug, Clone)]
 pub enum AnyMove {
     ModelMove(Move),
@@ -55,7 +61,7 @@ pub struct Position {
     board: Board,
     frequency: f64,
     transitions: HashMap<Fen, Transition>,
-    possible_sequence: Vec<AnyMove>,
+    likeliest_sequence: MoveSequence,
 }
 
 #[derive(Debug, Clone)]
@@ -171,15 +177,15 @@ impl std::fmt::Display for Position {
                 100.0 * self.frequency() / self.transition_count() as f64
             ));
         }
-        if self.possible_sequence.len() > 0 {
+        if self.likeliest_sequence.moves.len() > 0 {
             pretty.push_str("This position can be reached by e.g.: ");
-            for (i, mv) in self.possible_sequence.iter().enumerate() {
+            for (i, mv) in self.likeliest_sequence.moves.iter().enumerate() {
                 if i % 2 == 0 {
                 pretty.push_str(&format!("{}.", i / 2 + 1));
                 }
                 pretty.push_str(&format!("{} ", mv));
             }
-            pretty.push_str("\n");
+            pretty.push_str(&format!("[{:.6}%]\n", 100.0 * self.likeliest_sequence.frequency));
         }
         pretty.fmt(f)
     }
@@ -207,8 +213,8 @@ impl Position {
         }
     }
 
-    pub fn set_sequence(&mut self, sequence: Vec<AnyMove>) {
-      self.possible_sequence = sequence;
+    pub fn set_sequence(&mut self, sequence: MoveSequence) {
+      self.likeliest_sequence = sequence;
     }
 
     pub fn apply_move(&mut self, mv: &Move) -> Result<Fen, Error> {
@@ -290,7 +296,7 @@ impl PositionCache {
             board: Board::from_fen(&fen.fen_str).unwrap(),
             frequency: 0.0,
             transitions: HashMap::new(),
-            possible_sequence: Vec::new(),
+            likeliest_sequence: MoveSequence::default(),
         })
     }
 
@@ -300,7 +306,7 @@ impl PositionCache {
             board: Board::from_fen(&fen.fen_str).unwrap(),
             frequency: 0.0,
             transitions: HashMap::new(),
-            possible_sequence: sequence,
+            likeliest_sequence: MoveSequence { moves: sequence, frequency: 0.0 },
         })
     }
 

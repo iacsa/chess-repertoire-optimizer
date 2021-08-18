@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::error::Error;
 use crate::opening_book::OpeningBook;
-use crate::position::{Fen, Position, PositionCache, AnyMove};
+use crate::position::{Fen, Position, PositionCache, AnyMove, MoveSequence};
 
 pub struct RepertoireOptimizer {
     me: Player,
@@ -17,7 +17,7 @@ struct FrequencyDelta {
     fen: Fen,
     fdelta: f64,
     ply: usize,
-    sequence: Vec<AnyMove>,
+    sequence: MoveSequence,
 }
 
 impl RepertoireOptimizer {
@@ -89,7 +89,7 @@ impl RepertoireOptimizer {
             fen: Fen::starting_board(),
             fdelta: 1.0,
             ply: 0,
-            sequence: Vec::new(),
+            sequence: MoveSequence { moves: Vec::new(), frequency: 1.0 },
         });
 
         while let Some(FrequencyDelta { fen, fdelta, ply, sequence }) = positions_to_update.pop() {
@@ -104,7 +104,8 @@ impl RepertoireOptimizer {
             position.set_sequence(sequence.clone());
             for (to_fen, transition) in position.transitions() {
                 let mut new_sequence = sequence.clone();
-                new_sequence.push(transition.mv.clone());
+                new_sequence.moves.push(transition.mv.clone());
+                new_sequence.frequency = sequence.frequency * transition.frequency;
                 positions_to_update.push(FrequencyDelta {
                     fen: to_fen.clone(),
                     fdelta: fdelta * transition.frequency,

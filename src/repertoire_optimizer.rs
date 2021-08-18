@@ -115,12 +115,6 @@ impl RepertoireOptimizer {
         }
     }
 
-    pub fn all_positions(&self) -> Vec<&Position> {
-        self.tree
-            .all_positions()
-            .collect()
-    }
-
     pub fn own_positions(&self) -> Vec<&Position> {
         self.tree
             .all_positions()

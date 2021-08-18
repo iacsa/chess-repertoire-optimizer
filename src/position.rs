@@ -3,16 +3,13 @@ use pleco::Board;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::rc::Rc;
-use log::info;
 
 use crate::conversion::move_matches_bitmove;
-use crate::opening_book::BookMove;
 use crate::error::Error;
 
 #[derive(Debug, Clone)]
 pub enum AnyMove {
     ModelMove(Move),
-    MyBookMove(BookMove),
     UCI(String),
 }
 
@@ -43,9 +40,6 @@ impl std::fmt::Display for AnyMove {
                         }
                     },
                 }
-            },
-            AnyMove::MyBookMove(mv) => {
-                        result += &mv.uci;
             },
             AnyMove::UCI(string) => {
                         result += &string;
@@ -240,8 +234,7 @@ impl Position {
             return Err(self.illegal_uci_move(uci));
         }
         let new_fen = Fen::new(&new_board.fen());
-        self.transitions
-            .insert(new_fen.clone(), Transition { frequency: *frequency, mv: AnyMove::UCI(uci.to_owned()) });
+        self.transitions.entry(new_fen.clone()).or_insert( Transition { frequency: 0.0, mv: AnyMove::UCI(uci.to_owned()) } ).frequency = *frequency;
         Ok(new_fen)
     }
 

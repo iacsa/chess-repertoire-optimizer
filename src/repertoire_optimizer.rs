@@ -101,7 +101,9 @@ impl RepertoireOptimizer {
                 self.average_book_length += (ply / 2) as f64 * fdelta;
             }
             position.increase_frequency(fdelta);
-            position.set_sequence(sequence.clone());
+            if position.sequence().frequency < sequence.frequency {
+                position.set_sequence(sequence.clone());
+            }
             for (to_fen, transition) in position.transitions() {
                 let mut new_sequence = sequence.clone();
                 new_sequence.moves.push(transition.mv.clone());

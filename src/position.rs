@@ -213,6 +213,10 @@ impl Position {
         }
     }
 
+    pub fn sequence(&self) -> &MoveSequence {
+      &self.likeliest_sequence
+    }
+
     pub fn set_sequence(&mut self, sequence: MoveSequence) {
       self.likeliest_sequence = sequence;
     }

@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::error::Error;
 use crate::opening_book::OpeningBook;
-use crate::position::{Fen, Position, PositionCache};
+use crate::position::{Fen, Position, PositionCache, AnyMove};
 
 pub struct RepertoireOptimizer {
     me: Player,
@@ -17,6 +17,7 @@ struct FrequencyDelta {
     fen: Fen,
     fdelta: f64,
     ply: usize,
+    sequence: Vec<AnyMove>,
 }
 
 impl RepertoireOptimizer {
@@ -36,9 +37,11 @@ impl RepertoireOptimizer {
     pub fn add_game_to_repertoire(&mut self, game: chess_pgn_parser::Game) -> Result<(), Error> {
         let mut fen = Fen::starting_board();
         let mut pos = self.tree.position(&fen);
+        let mut sequence = Vec::<AnyMove>::new();
         for mv in game.moves {
+            sequence.push(AnyMove::ModelMove(mv.move_.move_.clone()));
             fen = pos.apply_move(&mv.move_.move_)?;
-            pos = self.tree.position(&fen);
+            pos = self.tree.position_w_sequence(&fen, sequence.clone());
         }
         Ok(())
     }
@@ -48,14 +51,16 @@ impl RepertoireOptimizer {
         book: &mut dyn OpeningBook,
     ) -> Result<(), Error> {
         let me = self.me;
-        let fens = self
+        let fens: Vec<Result<Fen, Error>> = self
             .tree
             .all_positions_mut()
             .filter(|pos| pos.board().turn() != me)
             .flat_map(|pos| {
                 book.moves(pos.fen())
                     .into_iter()
-                    .map(move |book_move| pos.apply_uci(&book_move.uci, book_move.frequency))
+                    .map(move |book_move| {
+                        pos.apply_uci(&book_move.uci, &book_move.frequency)
+                    })
             })
             .collect::<Vec<_>>();
         for fen in fens {
@@ -84,9 +89,10 @@ impl RepertoireOptimizer {
             fen: Fen::starting_board(),
             fdelta: 1.0,
             ply: 0,
+            sequence: Vec::new(),
         });
 
-        while let Some(FrequencyDelta { fen, fdelta, ply }) = positions_to_update.pop() {
+        while let Some(FrequencyDelta { fen, fdelta, ply, sequence }) = positions_to_update.pop() {
             if fdelta == 0.0 {
                 continue;
             }
@@ -95,14 +101,24 @@ impl RepertoireOptimizer {
                 self.average_book_length += (ply / 2) as f64 * fdelta;
             }
             position.increase_frequency(fdelta);
-            for (to_fen, frequency) in position.transitions() {
+            position.set_sequence(sequence.clone());
+            for (to_fen, transition) in position.transitions() {
+                let mut new_sequence = sequence.clone();
+                new_sequence.push(transition.mv.clone());
                 positions_to_update.push(FrequencyDelta {
                     fen: to_fen.clone(),
-                    fdelta: fdelta * frequency.frequency,
+                    fdelta: fdelta * transition.frequency,
                     ply: ply + 1,
+                    sequence: new_sequence,
                 });
             }
         }
+    }
+
+    pub fn all_positions(&self) -> Vec<&Position> {
+        self.tree
+            .all_positions()
+            .collect()
     }
 
     pub fn own_positions(&self) -> Vec<&Position> {
@@ -140,15 +156,24 @@ impl RepertoireOptimizer {
     ) -> Vec<&'a Position> {
         let mut recommendations = positions.to_owned();
         recommendations.retain(|pos| pos.transition_count() > 1);
-        recommendations.sort_by(
-            |a, b| match b.transition_count().cmp(&a.transition_count()) {
-                std::cmp::Ordering::Equal => a.frequency().partial_cmp(b.frequency()).unwrap(),
-                other => other,
-            },
-        );
         recommendations.sort_by(|a, b| {
-            (b.frequency() / b.transition_count() as f64)
-                .partial_cmp(&(b.frequency() / a.transition_count() as f64))
+            (a.frequency() / a.transition_count() as f64)
+                .partial_cmp(&(b.frequency() / b.transition_count() as f64))
+                .unwrap()
+        });
+        recommendations.truncate(count);
+        recommendations
+    }
+
+    pub fn recommend_for_reduction<'a>(
+        positions: &[&'a Position],
+        count: usize,
+    ) -> Vec<&'a Position> {
+        let mut recommendations = positions.to_owned();
+        recommendations.retain(|pos| pos.transition_count() > 1);
+        recommendations.sort_by(|a, b| {
+            (b.frequency() * b.transition_count() as f64)
+                .partial_cmp(&(a.frequency() * a.transition_count() as f64))
                 .unwrap()
         });
         recommendations.truncate(count);

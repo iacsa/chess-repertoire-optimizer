@@ -1,21 +1,70 @@
-use chess_pgn_parser::Move;
+use chess_pgn_parser::{Move, Piece};
 use pleco::Board;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::rc::Rc;
+use log::info;
 
 use crate::conversion::move_matches_bitmove;
+use crate::opening_book::BookMove;
 use crate::error::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub enum AnyMove {
+    ModelMove(Move),
+    MyBookMove(BookMove),
+    UCI(String),
+}
+
+impl std::fmt::Display for AnyMove {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut result = String::new();
+        match self {
+            AnyMove::ModelMove(mv) => {
+                match mv {
+                    Move::CastleKingside => result += "0-0",
+                    Move::CastleQueenside => result += "0-0-0",
+                    Move::BasicMove { piece, to, from, is_capture, promoted_to } => {
+                        result += &match piece {
+                            Piece::King => "K",
+                            Piece::Queen => "Q",
+                            Piece::Knight => "N",
+                            Piece::Rook => "R",
+                            Piece::Bishop => "B",
+                            Piece::Pawn => "",
+                        };
+                        result += &format!("{:?}", from).replace("X", "").to_lowercase();
+                        if *is_capture {
+                          result += "x";
+                        }
+                        result += &format!("{:?}", to).to_lowercase();
+                        if promoted_to.is_some() {
+                            result += &format!("{:?}", promoted_to.unwrap());
+                        }
+                    },
+                }
+            },
+            AnyMove::MyBookMove(mv) => {
+                        result += &mv.uci;
+            },
+            AnyMove::UCI(string) => {
+                        result += &string;
+            },
+        }
+        result.fmt(f)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Position {
     fen: Fen,
     board: Board,
     frequency: f64,
-    transitions: HashMap<Fen, Frequency>,
+    transitions: HashMap<Fen, Transition>,
+    possible_sequence: Vec<AnyMove>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Frequency {
     pub frequency: f64,
 }
@@ -128,6 +177,16 @@ impl std::fmt::Display for Position {
                 100.0 * self.frequency() / self.transition_count() as f64
             ));
         }
+        if self.possible_sequence.len() > 0 {
+            pretty.push_str("This position can be reached by e.g.: ");
+            for (i, mv) in self.possible_sequence.iter().enumerate() {
+                if i % 2 == 0 {
+                pretty.push_str(&format!("{}.", i / 2 + 1));
+                }
+                pretty.push_str(&format!("{} ", mv));
+            }
+            pretty.push_str("\n");
+        }
         pretty.fmt(f)
     }
 }
@@ -154,6 +213,10 @@ impl Position {
         }
     }
 
+    pub fn set_sequence(&mut self, sequence: Vec<AnyMove>) {
+      self.possible_sequence = sequence;
+    }
+
     pub fn apply_move(&mut self, mv: &Move) -> Result<Fen, Error> {
         let mut new_board = self.board.clone();
         let mut candidates = new_board
@@ -167,18 +230,18 @@ impl Position {
         new_board.apply_move(bmv);
         let new_fen = Fen::new(&new_board.fen());
         self.transitions
-            .insert(new_fen.clone(), Frequency { frequency: 0.0 });
+            .insert(new_fen.clone(), Transition { frequency: 0.0, mv: AnyMove::ModelMove(mv.clone()) });
         Ok(new_fen)
     }
 
-    pub fn apply_uci(&mut self, uci: &str, frequency: f64) -> Result<Fen, Error> {
+    pub fn apply_uci(&mut self, uci: &str, frequency: &f64) -> Result<Fen, Error> {
         let mut new_board = self.board.clone();
         if !new_board.apply_uci_move(uci) {
             return Err(self.illegal_uci_move(uci));
         }
         let new_fen = Fen::new(&new_board.fen());
         self.transitions
-            .insert(new_fen.clone(), Frequency { frequency });
+            .insert(new_fen.clone(), Transition { frequency: *frequency, mv: AnyMove::UCI(uci.to_owned()) });
         Ok(new_fen)
     }
 
@@ -198,17 +261,23 @@ impl Position {
         self.frequency += fdelta;
     }
 
-    pub fn transitions(&self) -> impl Iterator<Item = (&Fen, &Frequency)> {
+    pub fn transitions(&self) -> impl Iterator<Item = (&Fen, &Transition)> {
         self.transitions.iter()
     }
 
-    pub fn frequencies_mut(&mut self) -> impl Iterator<Item = &mut Frequency> {
+    pub fn frequencies_mut(&mut self) -> impl Iterator<Item = &mut Transition> {
         self.transitions.values_mut()
     }
 
     pub fn transition_count(&self) -> usize {
         self.transitions.len()
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Transition {
+  pub mv: AnyMove,
+  pub frequency: f64,
 }
 
 pub struct PositionCache {
@@ -228,6 +297,17 @@ impl PositionCache {
             board: Board::from_fen(&fen.fen_str).unwrap(),
             frequency: 0.0,
             transitions: HashMap::new(),
+            possible_sequence: Vec::new(),
+        })
+    }
+
+    pub fn position_w_sequence(&mut self, fen: &Fen, sequence: Vec<AnyMove>) -> &mut Position {
+        self.map.entry(fen.clone()).or_insert_with(|| Position {
+            fen: fen.clone(),
+            board: Board::from_fen(&fen.fen_str).unwrap(),
+            frequency: 0.0,
+            transitions: HashMap::new(),
+            possible_sequence: sequence,
         })
     }
 

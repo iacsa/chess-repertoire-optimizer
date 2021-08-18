@@ -71,8 +71,16 @@ impl Lichess {
         let mut response = self.client.get(url).send()?;
         match response.status() {
             StatusCode::OK => {
-                let lbook: Book = response.json().unwrap();
-                Ok(lbook)
+                match response.json() {
+                   Ok(json) => Ok(json),
+                   Err(some) => {
+                        println!("Error accessing lichess API: {:?}", some);
+                        thread::sleep(time::Duration::from_secs(10));
+                        self.get_url(url)
+                   }
+                }
+                //let lbook: Book = response.json().unwrap();
+                //Ok(lbook)
             }
             StatusCode::TOO_MANY_REQUESTS => {
                 thread::sleep(time::Duration::from_secs(10));

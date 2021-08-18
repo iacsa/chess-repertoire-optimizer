@@ -44,6 +44,10 @@ struct Opt {
     #[structopt(long, default_value = "0")]
     most: usize,
 
+    /// How many expensive choices to show
+    #[structopt(long, default_value = "0")]
+    costly: usize,
+
     /// Print more additional information
     #[structopt(name="verbose", long, parse(from_occurrences = log_level))]
     log_level: LevelFilter,
@@ -185,7 +189,7 @@ pub fn main() -> Result<(), Error> {
     println!();
     println!("## Repertoire Statistics ##");
     println!(
-        "Average moves you stay in book per game: {} (higher is better)",
+        "Average moves you stay in book per game: {:.5} (higher is better)",
         average_book_length
     );
     println!(
@@ -193,6 +197,22 @@ pub fn main() -> Result<(), Error> {
         positions
             .iter()
             .filter(|pos| pos.transition_count() > 0)
+            .count()
+    );
+    println!(
+        "=> Average impact of each move in your repertoire: m{:.5} (higher is better)",
+        average_book_length * 1000.0
+        /
+        ( positions
+             .iter()
+             .filter(|pos| pos.transition_count() > 0)
+             .count() as f64 )
+    );
+    println!(
+        "You have {} unprepared positions (lower is better)",
+        positions
+            .iter()
+            .filter(|pos| pos.transition_count() == 0)
             .count()
     );
 
@@ -224,6 +244,16 @@ pub fn main() -> Result<(), Error> {
         println!("Consider reducing the number of different moves you play here");
         println!();
         for position in RepertoireOptimizer::recommend_for_narrowing(&positions, opt.most) {
+            println!("{}", position);
+        }
+    }
+
+    if opt.costly > 0 {
+        println!();
+        println!("## Most frequent positions where you have more than one move prepared ##");
+        println!("Reducing your options here would reduce your workload the most, while still keeping you prepared");
+        println!();
+        for position in RepertoireOptimizer::recommend_for_reduction(&positions, opt.costly) {
             println!("{}", position);
         }
     }

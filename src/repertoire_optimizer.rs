@@ -97,8 +97,12 @@ impl RepertoireOptimizer {
                 continue;
             }
             let position = self.tree.position(&fen);
-            if position.board().turn() == self.me && position.transition_count() == 0 {
-                self.average_book_length += (ply / 2) as f64 * fdelta;
+            if position.transition_count() == 0 { // Leaf node -> cumulate frequency
+                if position.board().turn() == self.me {
+                    self.average_book_length += (ply / 2) as f64 * fdelta;
+                } else {
+                    self.average_book_length += ((ply + 1) / 2) as f64 * fdelta;
+                }
             }
             position.increase_frequency(fdelta);
             if position.sequence().frequency < sequence.frequency {

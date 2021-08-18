@@ -178,7 +178,7 @@ impl std::fmt::Display for Position {
             ));
         }
         if self.likeliest_sequence.moves.len() > 0 {
-            pretty.push_str("This position can be reached by e.g.: ");
+            pretty.push_str("Most likely reached by: ");
             for (i, mv) in self.likeliest_sequence.moves.iter().enumerate() {
                 if i % 2 == 0 {
                 pretty.push_str(&format!("{}.", i / 2 + 1));

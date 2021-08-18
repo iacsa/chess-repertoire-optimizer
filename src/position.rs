@@ -185,7 +185,7 @@ impl std::fmt::Display for Position {
                 }
                 pretty.push_str(&format!("{} ", mv));
             }
-            pretty.push_str(&format!("[{:.6}%]\n", 100.0 * self.likeliest_sequence.frequency));
+            pretty.push_str(&format!("[{:.2}%]\n", 100.0 * self.likeliest_sequence.frequency / self.frequency));
         }
         pretty.fmt(f)
     }
